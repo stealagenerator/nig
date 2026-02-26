@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EAGLE_CRAFT // ACCESS TERMINAL</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #00ff41;
+    --green-dim: #00aa2b;
+    --green-dark: #003b12;
+    --bg: #020c04;
+    --red: #ff2244;
+    --cyan: #00ffe7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: crosshair;
+  }
+
+  #matrix-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.15;
+  }
+
+  .overlay-scanlines {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0,255,65,0.025) 0px,
+      transparent 1px,
+      transparent 2px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .overlay-vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.9) 100%);
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  .corner {
+    position: fixed;
+    width: 28px; height: 28px;
+    z-index: 9997;
+    pointer-events: none;
+  }
+  .corner::before, .corner::after {
+    content: '';
+    position: absolute;
+    background: var(--green);
+    opacity: 0.7;
+  }
+  .corner.tl { top: 8px; left: 8px; }
+  .corner.tl::before { width: 2px; height: 18px; top: 0; left: 0; }
+  .corner.tl::after  { width: 18px; height: 2px; top: 0; left: 0; }
+  .corner.tr { top: 8px; right: 8px; }
+  .corner.tr::before { width: 2px; height: 18px; top: 0; right: 0; }
+  .corner.tr::after  { width: 18px; height: 2px; top: 0; right: 0; }
+  .corner.bl { bottom: 8px; left: 8px; }
+  .corner.bl::before { width: 2px; height: 18px; bottom: 0; left: 0; }
+  .corner.bl::after  { width: 18px; height: 2px; bottom: 0; left: 0; }
+  .corner.br { bottom: 8px; right: 8px; }
+  .corner.br::before { width: 2px; height: 18px; bottom: 0; right: 0; }
+  .corner.br::after  { width: 18px; height: 2px; bottom: 0; right: 0; }
+
+  /* ══ BOOT SCREEN ══ */
+  #boot-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 40px 20px;
+    transition: opacity 0.6s ease;
+  }
+
+  #boot-title {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(22px, 5vw, 52px);
+    font-weight: 900;
+    color: var(--green);
+    text-shadow: 0 0 20px var(--green), 0 0 60px rgba(0,255,65,0.4);
+    letter-spacing: 10px;
+    margin-bottom: 8px;
+    animation: flicker 6s infinite;
+  }
+
+  @keyframes flicker {
+    0%,96%,98%,100% { opacity: 1; }
+    97%,99% { opacity: 0.5; }
+  }
+
+  #boot-subtitle {
+    font-size: 10px;
+    color: var(--green-dim);
+    letter-spacing: 4px;
+    margin-bottom: 22px;
+  }
+
+  #boot-lines {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-height: 160px;
+  }
+
+  .boot-line {
+    font-size: 12px;
+    color: var(--green-dim);
+    opacity: 0;
+    animation: fadeSlide 0.12s forwards;
+  }
+  .boot-line.bright { color: var(--green); }
+  .boot-line.warn   { color: var(--red); }
+  .boot-line.info   { color: var(--cyan); }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateX(-8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  #progress-wrap {
+    width: 100%;
+    max-width: 640px;
+    margin-top: 18px;
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  #progress-label {
+    font-size: 10px;
+    color: var(--green-dim);
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+  }
+  #progress-track {
+    height: 3px;
+    background: var(--green-dark);
+    overflow: hidden;
+    position: relative;
+  }
+  #progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+    transition: width 0.04s linear;
+  }
+  #progress-track::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -60%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  @keyframes shimmer { to { left: 160%; } }
+
+  #launch-btn {
+    margin-top: 30px;
+    padding: 15px 58px;
+    background: transparent;
+    border: 2px solid var(--green);
+    color: var(--green);
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    cursor: pointer;
+    text-transform: uppercase;
+    opacity: 0;
+    position: relative;
+    overflow: hidden;
+    clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  #launch-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(0,255,65,0.14), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.45s;
+  }
+  #launch-btn:hover::before { transform: translateX(100%); }
+  #launch-btn:hover {
+    background: rgba(0,255,65,0.07);
+    box-shadow: 0 0 30px rgba(0,255,65,0.35), inset 0 0 20px rgba(0,255,65,0.04);
+  }
+  #launch-btn.ready {
+    animation: revealBtn 0.5s forwards, btnPulse 2.5s 0.5s infinite;
+  }
+  @keyframes revealBtn {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes btnPulse {
+    0%,100% { box-shadow: 0 0 8px rgba(0,255,65,0.25); }
+    50%     { box-shadow: 0 0 28px rgba(0,255,65,0.65), 0 0 60px rgba(0,255,65,0.15); }
+  }
+
+  /* ══ GAME SCREEN ══ */
+  #game-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 400;
+    flex-direction: column;
+  }
+
+  #hud {
+    height: 38px;
+    background: rgba(2,10,4,0.98);
+    border-bottom: 1px solid #091f0c;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+
+  .hud-left, .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .hud-logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--green);
+    text-shadow: 0 0 8px var(--green);
+  }
+
+  .hud-sep { color: #091f0c; }
+
+  .hud-tag {
+    font-size: 9px;
+    color: var(--green-dim);
+    letter-spacing: 1px;
+    border: 1px solid #091f0c;
+    padding: 2px 6px;
+  }
+  .hud-tag span { color: var(--green); }
+
+  #status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: dotBlink 1.4s infinite;
+  }
+  @keyframes dotBlink {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.15; }
+  }
+
+  #clock { font-size: 10px; color: var(--green-dim); }
+
+  .hud-btn {
+    background: transparent;
+    border: 1px solid #091f0c;
+    color: var(--green-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    padding: 4px 10px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.15s;
+  }
+  .hud-btn:hover {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(0,255,65,0.06);
+  }
+  .hud-btn.fs {
+    border-color: #0a2a2a;
+    color: var(--cyan);
+  }
+  .hud-btn.fs:hover {
+    border-color: var(--cyan);
+    background: rgba(0,255,231,0.06);
+    box-shadow: 0 0 10px rgba(0,255,231,0.2);
+  }
+
+  /* iframe wrapper */
+  #iframe-wrap {
+    flex: 1;
+    position: relative;
+    background: #000;
+  }
+
+  #game-frame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  /* Blocked fallback */
+  #blocked-msg {
+    display: none;
+    position: absolute;
+    inset: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .bm-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    color: var(--red);
+    text-shadow: 0 0 12px var(--red);
+    letter-spacing: 3px;
+  }
+  .bm-text {
+    font-size: 12px;
+    color: var(--green-dim);
+    text-align: center;
+    max-width: 460px;
+    line-height: 2;
+  }
+  .bm-btn {
+    padding: 12px 36px;
+    background: transparent;
+    border: 2px solid var(--cyan);
+    color: var(--cyan);
+    font-family: 'Orbitron', monospace;
+    font-size: 11px;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .bm-btn:hover {
+    background: rgba(0,255,231,0.08);
+    box-shadow: 0 0 20px rgba(0,255,231,0.3);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="matrix-canvas"></canvas>
+<div class="overlay-scanlines"></div>
+<div class="overlay-vignette"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<!-- BOOT SCREEN -->
+<div id="boot-screen">
+  <div id="boot-title">EAGLERCRAFT</div>
+  <div id="boot-subtitle">// RELEASE 1.12.2 // UNAUTHORIZED ACCESS //</div>
+  <div id="boot-lines"></div>
+  <div id="progress-wrap">
+    <div id="progress-label">
+      <span id="prog-status">INITIALIZING...</span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div id="progress-track"><div id="progress-bar"></div></div>
+  </div>
+  <button id="launch-btn" onclick="launchGame()">[ LAUNCH CLIENT ]</button>
+</div>
+
+<!-- GAME SCREEN -->
+<div id="game-screen">
+  <div id="hud">
+    <div class="hud-left">
+      <span class="hud-logo">EAGLERCRAFT</span>
+      <span class="hud-sep">|</span>
+      <span class="hud-tag">VER <span>1.12.2</span></span>
+      <span class="hud-tag">STATUS <span id="conn-status">CONNECTING</span></span>
+      <span class="hud-tag">ENC <span>AES-256</span></span>
+      <span class="hud-tag">PROXY <span>ACTIVE</span></span>
+    </div>
+    <div class="hud-right">
+      <div id="clock">--:--:--</div>
+      <div id="status-dot"></div>
+      <button class="hud-btn fs" onclick="toggleFullscreen()" id="fs-btn">[ ⛶ FULLSCREEN ]</button>
+      <button class="hud-btn" onclick="openTab()">[ NEW TAB ↗ ]</button>
+      <button class="hud-btn" onclick="goBack()">[ EXIT ]</button>
+    </div>
+  </div>
+
+  <div id="iframe-wrap">
+    <iframe
+      id="game-frame"
+      src=""
+      allowfullscreen
+      allow="fullscreen *; autoplay *; pointer-lock *"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock allow-top-navigation"
+    ></iframe>
+
+    <div id="blocked-msg">
+      <div class="bm-title">// EMBED BLOCKED //</div>
+      <div class="bm-text">
+        eaglercraft.com is blocking iframe embedding via browser security policies.<br>
+        Use the button below to open the game in a new tab instead.
+      </div>
+      <button class="bm-btn" onclick="openTab()">[ OPEN IN NEW TAB ↗ ]</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Matrix Rain ──────────────────────────────────────────────
+const canvas = document.getElementById('matrix-canvas');
+const ctx    = canvas.getContext('2d');
+const CHARS  = 'アイウエオカキクケコ0123456789ABCDEF<>{}[]|/\\!@#$%^&*';
+let cols, drops;
+
+function initMatrix() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  cols  = Math.floor(canvas.width / 14);
+  drops = Array.from({length: cols}, () => Math.random() * -80);
+}
+function drawMatrix() {
+  ctx.fillStyle = 'rgba(2,12,4,0.05)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = '13px Share Tech Mono';
+  drops.forEach((y, i) => {
+    const bright = Math.random() > 0.93;
+    ctx.fillStyle = bright ? '#aaffcc' : '#00ff41';
+    ctx.fillText(CHARS[Math.floor(Math.random() * CHARS.length)], i * 14, y * 14);
+    if (y * 14 > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    else drops[i]++;
+  });
+}
+initMatrix();
+setInterval(drawMatrix, 38);
+window.addEventListener('resize', initMatrix);
+
+// ── Boot Messages ─────────────────────────────────────────────
+const MSGS = [
+  { t: 'Initializing EAGLE_OS v4.2.0...', c: '',       d: 180  },
+  { t: 'POST complete. All systems nominal.', c: 'bright', d: 340 },
+  { t: 'Loading encrypted network stack...', c: '',    d: 520  },
+  { t: 'VPN tunnel established — NODE_47 >> 10.0.0.1 [MASKED]', c: 'info', d: 700 },
+  { t: 'Spoofing hardware fingerprint: DE:AD:BE:EF:CA:FE', c: '', d: 880 },
+  { t: 'WARNING: Unsigned kernel module detected', c: 'warn', d: 1060 },
+  { t: 'Signature bypass ... OK', c: 'bright', d: 1200 },
+  { t: 'Mounting EaglercraftX 1.12.2 payload...', c: '', d: 1380 },
+  { t: 'WebSocket relay: wss://relay.eaglercraft.com:443', c: 'info', d: 1560 },
+  { t: 'Renderer: WebGL2 [HARDWARE_ACCEL] ... READY', c: 'bright', d: 1740 },
+  { t: 'All systems operational. Standing by.', c: 'info', d: 1920 },
+];
+
+const linesEl = document.getElementById('boot-lines');
+MSGS.forEach(({t, c, d}) => {
+  setTimeout(() => {
+    const el = document.createElement('div');
+    el.className = 'boot-line ' + c;
+    el.textContent = '> ' + t;
+    linesEl.appendChild(el);
+  }, d);
+});
+
+// Progress bar
+const progressWrap = document.getElementById('progress-wrap');
+const progressBar  = document.getElementById('progress-bar');
+const progStatus   = document.getElementById('prog-status');
+const progPct      = document.getElementById('prog-pct');
+const launchBtn    = document.getElementById('launch-btn');
+
+const STAGES = [
+  [25,  'LOADING KERNEL...'],
+  [50,  'MOUNTING PAYLOAD...'],
+  [75,  'ESTABLISHING RELAY...'],
+  [92,  'PATCHING RENDERER...'],
+  [100, 'LOAD COMPLETE — READY'],
+];
+let sIdx = 0;
+
+setTimeout(() => {
+  progressWrap.style.opacity = '1';
+  let pct = 0;
+  const iv = setInterval(() => {
+    pct = Math.min(100, pct + 0.7 + Math.random() * 1.4);
+    progressBar.style.width = pct + '%';
+    progPct.textContent = Math.floor(pct) + '%';
+    if (sIdx < STAGES.length && pct >= STAGES[sIdx][0]) {
+      progStatus.textContent = STAGES[sIdx][1];
+      sIdx++;
+    }
+    if (pct >= 100) { clearInterval(iv); launchBtn.classList.add('ready'); }
+  }, 45);
+}, 1500);
+
+// ── Launch ────────────────────────────────────────────────────
+const GAME_URL = 'https://eaglercraft.com/mc/1.12.2/';
+
+function launchGame() {
+  const boot = document.getElementById('boot-screen');
+  const game = document.getElementById('game-screen');
+  boot.style.opacity = '0';
+  setTimeout(() => {
+    boot.style.display = 'none';
+    game.style.display = 'flex';
+    const frame = document.getElementById('game-frame');
+    frame.src = GAME_URL;
+
+    // After 6s, try to detect if iframe was blocked
+    setTimeout(() => {
+      try {
+        const doc = frame.contentDocument || frame.contentWindow.document;
+        if (!doc || doc.URL === 'about:blank') showBlocked();
+        else document.getElementById('conn-status').textContent = 'ONLINE';
+      } catch(e) {
+        // SecurityError = cross-origin loaded = game IS running!
+        document.getElementById('conn-status').textContent = 'ONLINE';
+      }
+    }, 6000);
+  }, 600);
+}
+
+function showBlocked() {
+  document.getElementById('blocked-msg').style.display = 'flex';
+}
+
+function goBack() {
+  const boot = document.getElementById('boot-screen');
+  const game = document.getElementById('game-screen');
+  document.getElementById('game-frame').src = '';
+  document.getElementById('blocked-msg').style.display = 'none';
+  game.style.display = 'none';
+  boot.style.display = 'flex';
+  boot.style.opacity = '0';
+  requestAnimationFrame(() => requestAnimationFrame(() => { boot.style.opacity = '1'; }));
+}
+
+function openTab() {
+  window.open(GAME_URL, '_blank');
+}
+
+// ── Fullscreen ────────────────────────────────────────────────
+function toggleFullscreen() {
+  const wrap  = document.getElementById('iframe-wrap');
+  const frame = document.getElementById('game-frame');
+
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    // Try iframe first, then wrapper
+    const el = frame;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    if (req) {
+      req.call(el).catch(() => {
+        const req2 = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+        if (req2) req2.call(wrap);
+      });
+    }
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen;
+    if (exit) exit.call(document);
+  }
+}
+
+['fullscreenchange','webkitfullscreenchange'].forEach(ev => {
+  document.addEventListener(ev, () => {
+    const btn = document.getElementById('fs-btn');
+    const inFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    btn.textContent = inFs ? '[ ⛶ EXIT FULLSCREEN ]' : '[ ⛶ FULLSCREEN ]';
+  });
+});
+
+// ── Clock ─────────────────────────────────────────────────────
+function tick() {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+}
+setInterval(tick, 1000);
+tick();
+</script>
+</body>
+</html>
